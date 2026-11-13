@@ -62,6 +62,8 @@ body{background:#f0f2f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 .prod-table{width:100%;border-collapse:collapse;font-size:13px}
 .prod-table th{padding:8px 10px;text-align:left;font-size:10px;font-weight:600;color:#7a8aaa;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid #e5e9f2;background:#fafbff}
 .prod-table th.r{text-align:right}
+.prod-table th.sort-th{cursor:pointer;user-select:none;white-space:nowrap}
+.prod-table th.sort-th:hover{background:#f0f4ff;color:#2563eb}
 .prod-table td{padding:8px 10px;border-bottom:1px solid #f0f2f8;vertical-align:top}
 .prod-table td.r{text-align:right;font-variant-numeric:tabular-nums;color:#1a2236;font-weight:500}
 .prod-table tr:last-child td{border-bottom:none}
@@ -3123,6 +3125,28 @@ function trendIcon(a,b){
 function norm(s){ return s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Z0-9]/g,' ').trim(); }
 
 // ═══════════════════════════════════════════
+// BUILD SUPPLIER PURCHASE DATA from STATIC_LINES
+// ═══════════════════════════════════════════
+function buildSupplierPurchaseData(){
+  const map = {};
+  for(const l of STATIC_LINES){
+    if(!l.cl || !l.y || l.v <= 0) continue;
+    const cl = l.cl.trim();
+    if(!map[cl]) map[cl] = { products:{} };
+    const pk = (l.ref||l.p||'').trim() || l.p;
+    if(!map[cl].products[pk]) map[cl].products[pk] = { name:l.p, ref:l.ref||'', cat:l.c||'', years:{} };
+    if(!map[cl].products[pk].years[l.y]) map[cl].products[pk].years[l.y] = 0;
+    map[cl].products[pk].years[l.y] += l.v;
+  }
+  return map;
+}
+let SUPPLIER_PURCHASE_DATA = null;
+function getSupplierPurchaseData(){
+  if(!SUPPLIER_PURCHASE_DATA) SUPPLIER_PURCHASE_DATA = buildSupplierPurchaseData();
+  return SUPPLIER_PURCHASE_DATA;
+}
+
+// ═══════════════════════════════════════════
 // BUILD CLIENT DATA from STATIC_LINES
 // ═══════════════════════════════════════════
 function buildClientData(){
@@ -3295,18 +3319,7 @@ function renderClientDetail(c){
 
   // Build product rows sorted by 2026 desc then 2025
   const prods = Object.values(c.products).sort((a,b)=>((b.years[2026]||0)+(b.years[2025]||0))-((a.years[2026]||0)+(a.years[2025]||0)));
-
-  const prodRows = prods.map(p => {
-    const p24=p.years[2024]||0, p25=p.years[2025]||0, p26=p.years[2026]||0;
-    if(p24+p25+p26===0) return '';
-    return `<tr>
-      <td><div class="prod-name">${p.name||p.ref}</div><div class="prod-ref">${p.ref} ${p.cat?'· '+p.cat:''}</div></td>
-      <td class="r">${p24>0?fmt(p24):'<span style="color:#ddd">—</span>'}</td>
-      <td class="r">${p25>0?fmt(p25):'<span style="color:#ddd">—</span>'}</td>
-      <td class="r">${p26>0?fmt(p26):'<span style="color:#ddd">—</span>'}</td>
-      <td class="r">${trendIcon(p25,p26)}</td>
-    </tr>`;
-  }).join('');
+  const clientTableId = 'pt-cli-'+c.name.replace(/[^a-z0-9]/gi,'_');
 
   const safeKey = c.name.replace(/'/g,"\\'");
 
@@ -3329,19 +3342,7 @@ function renderClientDetail(c){
     </div>
 
     <div class="dtab-content" id="productos-${c.name.replace(/[^a-z0-9]/gi,'_')}">
-      ${prods.length===0?'<div class="empty">Sin líneas de producto</div>':`
-      <div style="overflow-x:auto">
-        <table class="prod-table">
-          <thead><tr>
-            <th>Producto / Referencia</th>
-            <th class="r">2024</th>
-            <th class="r">2025</th>
-            <th class="r">2026</th>
-            <th class="r">Tendencia</th>
-          </tr></thead>
-          <tbody>${prodRows}</tbody>
-        </table>
-      </div>`}
+      ${buildProdTableHTML(prods, clientTableId)}
     </div>
 
     <div class="dtab-content" id="notas-${c.name.replace(/[^a-z0-9]/gi,'_')}">
@@ -3387,6 +3388,59 @@ function saveClientNota(clientName){
 // ═══════════════════════════════════════════
 // PROVEEDORES TAB
 // ═══════════════════════════════════════════
+// Render sortable product table (used by both Clientes and Proveedores)
+function buildProdTableHTML(prods, tableId){
+  if(!prods || prods.length===0) return '<div class="empty">Sin líneas de producto</div>';
+  const rows = prods.map(p => {
+    const p24=p.years[2024]||0, p25=p.years[2025]||0, p26=p.years[2026]||0;
+    if(p24+p25+p26===0) return '';
+    return `<tr>
+      <td><div class="prod-name">${p.name||p.ref}</div><div class="prod-ref">${p.ref} ${p.cat?'· '+p.cat:''}</div></td>
+      <td class="r">${p24>0?fmt(p24):'<span style="color:#ddd">—</span>'}</td>
+      <td class="r">${p25>0?fmt(p25):'<span style="color:#ddd">—</span>'}</td>
+      <td class="r">${p26>0?fmt(p26):'<span style="color:#ddd">—</span>'}</td>
+      <td class="r">${trendIcon(p25,p26)}</td>
+    </tr>`;
+  }).join('');
+  return `<div style="overflow-x:auto">
+    <table class="prod-table" id="${tableId}">
+      <thead><tr>
+        <th>Producto / Referencia</th>
+        <th class="r sort-th" onclick="sortProdTable('${tableId}',2024)" data-sort-col="" title="Ordenar por 2024">2024 <span class="sort-icon"></span></th>
+        <th class="r sort-th" onclick="sortProdTable('${tableId}',2025)" data-sort-col="" title="Ordenar por 2025">2025 <span class="sort-icon"></span></th>
+        <th class="r sort-th" onclick="sortProdTable('${tableId}',2026)" data-sort-col="" title="Ordenar por 2026">2026 <span class="sort-icon"></span></th>
+        <th class="r">Tendencia</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// Sort product table by year column
+function sortProdTable(tableId, year){
+  const table = document.getElementById(tableId);
+  if(!table) return;
+  const colIndex = year===2024?1 : year===2025?2 : 3;
+  const ths = table.querySelectorAll('thead th.sort-th');
+  // Determine sort direction
+  const th = ths[colIndex-1];
+  const asc = th.dataset.sortCol !== String(year) || th.dataset.sortDir === 'desc';
+  // Reset all headers
+  ths.forEach(h => { h.dataset.sortCol=''; h.dataset.sortDir=''; h.querySelector('.sort-icon').textContent=''; });
+  th.dataset.sortCol = year;
+  th.dataset.sortDir = asc ? 'asc' : 'desc';
+  th.querySelector('.sort-icon').textContent = asc ? ' ▲' : ' ▼';
+  // Sort rows
+  const tbody = table.querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr')).filter(r=>r.cells.length>1);
+  rows.sort((a,b) => {
+    const va = parseFloat((a.cells[colIndex].textContent||'0').replace(/[^0-9.]/g,''))||0;
+    const vb = parseFloat((b.cells[colIndex].textContent||'0').replace(/[^0-9.]/g,''))||0;
+    return asc ? va-vb : vb-va;
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+
 function renderProveedores(){
   renderProveedorCards(SUPPLIER_DATA);
 }
@@ -3447,7 +3501,7 @@ function renderProveedorCards(list){
         ${s.meetingAt ? `<div style="margin-bottom:12px;padding:6px 10px;background:#f0f8ff;border-radius:8px;font-size:12px;color:#2563eb;border-left:3px solid #2563eb">📍 Reunión MEDICA: ${s.meetingAt}</div>` : ''}
         ${s.prods && s.prods.length ? `
         <div style="margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:#7a8aaa;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">📦 Productos / Materiales</div>
+          <div style="font-size:11px;font-weight:700;color:#7a8aaa;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">📦 Productos / Materiales ofrecidos</div>
           ${s.prods.map(pr => `
           <div style="margin-bottom:8px;padding:8px 10px;background:#f8f9fb;border-radius:8px;border-left:3px solid #daaa00">
             <div style="font-size:13px;font-weight:600;color:#1a2236">${pr.name}</div>
@@ -3455,9 +3509,19 @@ function renderProveedorCards(list){
           </div>`).join('')}
         </div>` : ''}
         <div class="detail-tabs">
-          <div class="dtab active" onclick="switchDtab(this,'prov-notas')">📋 Notas</div>
+          <div class="dtab active" onclick="switchDtab(this,'prov-compras-${safeId}')">🛒 Compras</div>
+          <div class="dtab" onclick="switchDtab(this,'prov-notas-${safeId}')">📋 Notas</div>
         </div>
-        <div class="dtab-content active">
+        <div class="dtab-content active" id="prov-compras-${safeId}">
+          ${(()=>{
+            const pd = getSupplierPurchaseData();
+            const spData = pd[s.p];
+            if(!spData || Object.keys(spData.products).length===0) return '<div class="empty" style="font-size:12px;padding:10px 0">Sin compras registradas en el sistema</div>';
+            const sortedProds = Object.values(spData.products).sort((a,b)=>((b.years[2026]||0)+(b.years[2025]||0))-((a.years[2026]||0)+(a.years[2025]||0)));
+            return buildProdTableHTML(sortedProds, 'pt-prov-'+safeId);
+          })()}
+        </div>
+        <div class="dtab-content" id="prov-notas-${safeId}">
           <div class="notes-area">
             <textarea class="notes-textarea" id="pnota-${safeId}"
               placeholder="Acuerdos de precios, condiciones, productos negociados...">${savedNotes?savedNotes.text:''}</textarea>
