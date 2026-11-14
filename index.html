@@ -233,6 +233,49 @@ const CLIENT_ALIASES = {
 };
 function normalizeClient(n){ return CLIENT_ALIASES[n]||n; }
 
+// Aliases para matching de proveedores Odoo → SUPPLIER_DATA
+const SUPPLIER_ALIASES = {
+  'merck life science':        'Merck / Sigma-Aldrich',
+  'merck millipore':           'Merck / Sigma-Aldrich',
+  'sigma-aldrich':             'Merck / Sigma-Aldrich',
+  'merck kgaa':                'Merck / Sigma-Aldrich',
+  'sorachim españa':           'SORACHIM, S.A. (France)',
+  'sorachim':                  'SORACHIM, S.A. (France)',
+  'bio-techne sas':            'Bio-Techne / Bio-Techne SAS',
+  'bio techne':                'Bio-Techne / Bio-Techne SAS',
+  'biotechne':                 'Bio-Techne / Bio-Techne SAS',
+  'linear chemicals':          'LINEAR CHEMICALS SLU',
+  'impremta olser':            'IMPREMTA OLSER, S.L.U.',
+  'olser':                     'IMPREMTA OLSER, S.L.U.',
+  'isdo':                      'ISDO, S.L.',
+  'bioingenium':               'BIOINGENIUM',
+  'jtc diagnostics':           'JTC Diagnostics',
+  'fapon':                     'Fapon Biotech',
+  'sdix':                      'SDIX / Sekisui',
+  'sekisui diagnostics':       'Sekisui',
+  'diazyme':                   'Diazyme',
+  'anteotech':                 'ANTEOTECH',
+  'marlex':                    'Marlex',
+  'soplatec':                  'SOPLATEC',
+};
+function matchSupplierName(odooName){
+  const low = (odooName||'').toLowerCase().trim();
+  // Direct match
+  for(const s of SUPPLIER_DATA){ if(s.p.toLowerCase()===low) return s.p; }
+  // Alias map
+  for(const [alias,target] of Object.entries(SUPPLIER_ALIASES)){
+    if(low.includes(alias)) return target;
+  }
+  // Partial: check if any SUPPLIER_DATA name is contained in odoo name or vice versa
+  for(const s of SUPPLIER_DATA){
+    const sn = s.p.toLowerCase().replace(/[^a-z0-9]/g,' ').trim();
+    const on = low.replace(/[^a-z0-9]/g,' ').trim();
+    const snWords = sn.split(' ').filter(w=>w.length>3);
+    if(snWords.length>0 && snWords.every(w=>on.includes(w))) return s.p;
+  }
+  return null;
+}
+
 const SUPPLIER_DATA=[
   {p:'Bio-Techne / Bio-Techne SAS',v2024:0,v2025:364098,v2026:54400,meetingAt:'MEDICA H3/D25-1',prods:[
     {name:'Cytokine ELISA Kits (TNF-α, IL-6, IL-10)',cat:'Immunoassay',note:'Principal línea — kits listos para usar'},
@@ -3458,13 +3501,17 @@ function renderProveedorCards(list){
   const container = document.getElementById('proveedorList');
   if(!list.length){ container.innerHTML='<div class="empty">Sin resultados</div>'; return; }
   
-  const maxV = Math.max(...list.map(s=>Math.max(s.v2024||0,s.v2025||0,s.v2026||0)),1);
+  // Use real Odoo volumes (_v*) if available, else fall back to static (v*)
+  const getV = (s,y) => s['_v'+y] !== undefined ? s['_v'+y] : (s['v'+y]||0);
+  const maxV = Math.max(...list.map(s=>Math.max(getV(s,2024),getV(s,2025),getV(s,2026))),1);
 
   container.innerHTML = list.map(s => {
-    const total = (s.v2024||0)+(s.v2025||0)+(s.v2026||0);
-    const pct26 = Math.round((s.v2026||0)/maxV*100);
-    const pct25 = Math.round((s.v2025||0)/maxV*100);
-    const pct24 = Math.round((s.v2024||0)/maxV*100);
+    const r24=getV(s,2024), r25=getV(s,2025), r26=getV(s,2026);
+    const total = r24+r25+r26;
+    const pct26 = Math.round(r26/maxV*100);
+    const pct25 = Math.round(r25/maxV*100);
+    const pct24 = Math.round(r24/maxV*100);
+    const hasRealData = s._v2024!==undefined || s._v2025!==undefined || s._v2026!==undefined;
     const savedNotes = lsGet('prov_notas_'+s.p);
     const safeKey = s.p.replace(/'/g,"\\'");
     const safeId = s.p.replace(/[^a-z0-9]/gi,'_');
@@ -3474,11 +3521,11 @@ function renderProveedorCards(list){
       <div class="supplier-header" onclick="toggleSupplier(this.parentElement)">
         <div>
           <div class="supplier-name">${s.p}${savedNotes?'  <span style="color:#2563eb;font-size:12px">📋</span>':''}</div>
-          <div style="font-size:11px;color:#aab2c8;margin-top:2px">Total 3 años: ${fmt(total)}</div>
+          <div style="font-size:11px;color:#aab2c8;margin-top:2px">Total 3 años: ${fmt(total)}${hasRealData?' <span style="color:#22c55e;font-size:10px">● Odoo</span>':' <span style="color:#f59e0b;font-size:10px">○ est.</span>'}</div>
         </div>
         <div class="client-vols">
-          ${(s.v2026||0)>0?`<span class="vol-chip y26">2026: ${fmt(s.v2026)}</span>`:''}
-          ${(s.v2025||0)>0?`<span class="vol-chip y25">2025: ${fmt(s.v2025)}</span>`:''}
+          ${r26>0?`<span class="vol-chip y26">2026: ${fmt(r26)}</span>`:''}
+          ${r25>0?`<span class="vol-chip y25">2025: ${fmt(r25)}</span>`:''}
         </div>
         <div class="client-arrow">▶</div>
       </div>
@@ -3486,18 +3533,18 @@ function renderProveedorCards(list){
         <div style="margin-bottom:14px">
           <div class="year-row">
             <span class="year-label">2026</span>
-            <div class="bar-wrap"><div class="bar-fill bar-26" style="width:${pct26}%">${(s.v2026||0)>0?fmt(s.v2026):''}</div></div>
+            <div class="bar-wrap"><div class="bar-fill bar-26" style="width:${pct26}%">${r26>0?fmt(r26):''}</div></div>
           </div>
           <div class="year-row">
             <span class="year-label">2025</span>
-            <div class="bar-wrap"><div class="bar-fill bar-25" style="width:${pct25}%">${(s.v2025||0)>0?fmt(s.v2025):''}</div></div>
+            <div class="bar-wrap"><div class="bar-fill bar-25" style="width:${pct25}%">${r25>0?fmt(r25):''}</div></div>
           </div>
           <div class="year-row">
             <span class="year-label">2024</span>
-            <div class="bar-wrap"><div class="bar-fill bar-24" style="width:${pct24}%">${(s.v2024||0)>0?fmt(s.v2024):''}</div></div>
+            <div class="bar-wrap"><div class="bar-fill bar-24" style="width:${pct24}%">${r24>0?fmt(r24):''}</div></div>
           </div>
           <div style="font-size:11px;color:#aab2c8;margin-top:8px">
-            Tendencia 25→26: ${trendIcon(s.v2025||0, s.v2026||0)}
+            Tendencia 25→26: ${trendIcon(r25, r26)}
           </div>
         </div>
         ${s.meetingAt ? `<div style="margin-bottom:12px;padding:6px 10px;background:#f0f8ff;border-radius:8px;font-size:12px;color:#2563eb;border-left:3px solid #2563eb">📍 Reunión MEDICA: ${s.meetingAt}</div>` : ''}
@@ -3716,39 +3763,41 @@ async function syncFromOdoo(){
 
     syncProgress('Procesando '+purchLines.length+' líneas de compra...', 85);
 
-    // Build supplier purchase map: supplierName → { products: { pk: {name,years} } }
-    if(purchLines.length > 0){
-      const suppMap = {};
-      for(const l of purchLines){
-        const oInfo = l.order_id ? orderInfoMap[l.order_id[0]] : null;
-        if(!oInfo) continue;
-        const suppName = oInfo.suppName;
-        const y = oInfo.year;
-        const prodName = l.product_id ? l.product_id[1] : '(sin producto)';
-        const pk = l.product_id ? String(l.product_id[0]) : prodName;
-        const v = l.price_subtotal||0;
-        if(!suppMap[suppName]) suppMap[suppName] = {products:{}};
-        if(!suppMap[suppName].products[pk]) suppMap[suppName].products[pk] = {name:prodName, ref:'', cat:'', years:{}};
-        if(!suppMap[suppName].products[pk].years[y]) suppMap[suppName].products[pk].years[y] = 0;
-        suppMap[suppName].products[pk].years[y] += v;
-      }
-      // Match to SUPPLIER_DATA by normalized name and inject _purchaseProds
-      for(const s of SUPPLIER_DATA){
-        const sn = norm(s.p);
-        let match = suppMap[s.p];
-        if(!match){
-          for(const [k,v] of Object.entries(suppMap)){
-            if(norm(k).includes(sn) || sn.includes(norm(k))){ match = v; break; }
-          }
-        }
-        if(match){
-          s._purchaseProds = Object.values(match.products)
-            .filter(p=>(p.years[2024]||0)+(p.years[2025]||0)+(p.years[2026]||0)>0)
-            .sort((a,b)=>((b.years[2026]||0)+(b.years[2025]||0))-((a.years[2026]||0)+(a.years[2025]||0)));
-        }
-      }
-      SUPPLIER_PURCHASE_DATA = null;
+    // Build supplier purchase map: canonicalName → { products, years totals }
+    // Map each line to canonical supplier name via matchSupplierName
+    const suppMap = {}; // canonicalName → { products:{}, years:{} }
+    for(const l of purchLines){
+      const oInfo = l.order_id ? orderInfoMap[l.order_id[0]] : null;
+      if(!oInfo) continue;
+      const canonical = matchSupplierName(oInfo.suppName) || oInfo.suppName;
+      const y = oInfo.year;
+      const prodName = l.product_id ? l.product_id[1] : '(sin producto)';
+      const pk = l.product_id ? String(l.product_id[0]) : prodName;
+      const v = l.price_subtotal||0;
+      if(!suppMap[canonical]) suppMap[canonical] = {products:{}, years:{}};
+      // accumulate product lines
+      if(!suppMap[canonical].products[pk]) suppMap[canonical].products[pk] = {name:prodName, ref:'', cat:'', years:{}};
+      if(!suppMap[canonical].products[pk].years[y]) suppMap[canonical].products[pk].years[y] = 0;
+      suppMap[canonical].products[pk].years[y] += v;
+      // accumulate yearly totals
+      if(!suppMap[canonical].years[y]) suppMap[canonical].years[y] = 0;
+      suppMap[canonical].years[y] += v;
     }
+
+    // Inject into SUPPLIER_DATA: products + update real volumes
+    for(const s of SUPPLIER_DATA){
+      const match = suppMap[s.p];
+      if(match){
+        s._purchaseProds = Object.values(match.products)
+          .filter(p=>(p.years[2024]||0)+(p.years[2025]||0)+(p.years[2026]||0)>0)
+          .sort((a,b)=>((b.years[2026]||0)+(b.years[2025]||0))-((a.years[2026]||0)+(a.years[2025]||0)));
+        // Update real volumes from Odoo (confirmed orders only)
+        s._v2024 = Math.round(match.years[2024]||0);
+        s._v2025 = Math.round(match.years[2025]||0);
+        s._v2026 = Math.round(match.years[2026]||0);
+      }
+    }
+    SUPPLIER_PURCHASE_DATA = null;
 
     syncProgress('Actualizando vistas...', 92);
     renderClientes();
