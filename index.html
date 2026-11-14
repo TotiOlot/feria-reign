@@ -3398,9 +3398,9 @@ function buildProdTableHTML(prods, tableId){
     if(p24+p25+p26===0) return '';
     return `<tr>
       <td><div class="prod-name">${p.name||p.ref}</div><div class="prod-ref">${p.ref} ${p.cat?'· '+p.cat:''}</div></td>
-      <td class="r">${p24>0?fmt(p24):'<span style="color:#ddd">—</span>'}</td>
-      <td class="r">${p25>0?fmt(p25):'<span style="color:#ddd">—</span>'}</td>
-      <td class="r">${p26>0?fmt(p26):'<span style="color:#ddd">—</span>'}</td>
+      <td class="r" data-value="${p24}">${p24>0?fmt(p24):'<span style="color:#ddd">—</span>'}</td>
+      <td class="r" data-value="${p25}">${p25>0?fmt(p25):'<span style="color:#ddd">—</span>'}</td>
+      <td class="r" data-value="${p26}">${p26>0?fmt(p26):'<span style="color:#ddd">—</span>'}</td>
       <td class="r">${trendIcon(p25,p26)}</td>
     </tr>`;
   }).join('');
@@ -3436,8 +3436,8 @@ function sortProdTable(tableId, year){
   const tbody = table.querySelector('tbody');
   const rows = Array.from(tbody.querySelectorAll('tr')).filter(r=>r.cells.length>1);
   rows.sort((a,b) => {
-    const va = parseFloat((a.cells[colIndex].textContent||'0').replace(/[^0-9.]/g,''))||0;
-    const vb = parseFloat((b.cells[colIndex].textContent||'0').replace(/[^0-9.]/g,''))||0;
+    const va = parseFloat(a.cells[colIndex].dataset.value)||0;
+    const vb = parseFloat(b.cells[colIndex].dataset.value)||0;
     return asc ? va-vb : vb-va;
   });
   rows.forEach(r => tbody.appendChild(r));
@@ -3501,16 +3501,16 @@ function renderProveedorCards(list){
           </div>
         </div>
         ${s.meetingAt ? `<div style="margin-bottom:12px;padding:6px 10px;background:#f0f8ff;border-radius:8px;font-size:12px;color:#2563eb;border-left:3px solid #2563eb">📍 Reunión MEDICA: ${s.meetingAt}</div>` : ''}
-        ${s.prods && s.prods.length ? `
-        <div style="margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:#7a8aaa;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">📦 Productos / Materiales ofrecidos</div>
-          ${s.prods.map(pr => `
-          <div style="margin-bottom:8px;padding:8px 10px;background:#f8f9fb;border-radius:8px;border-left:3px solid #daaa00">
-            <div style="font-size:13px;font-weight:600;color:#1a2236">${pr.name}</div>
-            <div style="font-size:11px;color:#aab2c8;margin-top:2px">${pr.cat}${pr.note?' · <em>'+pr.note+'</em>':''}</div>
-          </div>`).join('')}
-        </div>` : ''}
-        <div class="dtab-content active" id="prov-notas-${safeId}">
+        ${s._purchaseProds && s._purchaseProds.length ? `
+        <div class="detail-tabs">
+          <div class="dtab active" onclick="switchDtab(this,'prov-compras-${safeId}')">🛒 Compras</div>
+          <div class="dtab" onclick="switchDtab(this,'prov-notas-${safeId}')">📋 Notas</div>
+        </div>
+        <div class="dtab-content active" id="prov-compras-${safeId}">
+          ${buildProdTableHTML(s._purchaseProds, 'pt-prov-'+safeId)}
+        </div>
+        <div class="dtab-content" id="prov-notas-${safeId}">` : `
+        <div class="dtab-content active" id="prov-notas-${safeId}">`}
           <div class="notes-area">
             <textarea class="notes-textarea" id="pnota-${safeId}"
               placeholder="Acuerdos de precios, condiciones, productos negociados...">${savedNotes?savedNotes.text:''}</textarea>
@@ -3639,7 +3639,7 @@ async function syncFromOdoo(){
     });
     const ordersData = await ordersRes.json();
     const orders = ordersData.result||[];
-    syncProgress('Procesando '+orders.length+' pedidos...', 75);
+    syncProgress('Procesando '+orders.length+' pedidos...', 65);
 
     // Build fresh CLIENT_DATA from orders
     const map = {};
@@ -3666,9 +3666,93 @@ async function syncFromOdoo(){
       if(staticMap[key]) c.products = staticMap[key];
     }
     CLIENT_DATA = newClients;
-    syncProgress('Actualizando vistas...', 90);
 
+    // ── Descargar pedidos de compra (purchase.order) ──────────────────
+    syncProgress('Descargando compras a proveedores...', 75);
+    const minDateP = (new Date().getFullYear()-2)+'-01-01';
+    const purchOrderDomain = [['state','in',['purchase','done']],['date_order','>=',minDateP]];
+    if(COMPANY_ID) purchOrderDomain.push(['company_id','=',COMPANY_ID]);
+    let purchOrders = [];
+    try {
+      const poRes = await fetch(PROXY, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:'search_read', params:{
+          uid:UID, session:SESSION, model:'purchase.order',
+          domain: purchOrderDomain,
+          fields:['id','partner_id','date_order','order_line'],
+          limit:10000
+        }})
+      });
+      const poData = await poRes.json();
+      purchOrders = poData.result||[];
+    } catch(e){ console.warn('Purchase orders fetch failed:', e.message); }
+
+    // Build order→partner+year map
+    const orderInfoMap = {}; // orderId → {suppName, year}
+    for(const po of purchOrders){
+      if(!po.partner_id) continue;
+      const y = po.date_order ? new Date(po.date_order).getFullYear() : new Date().getFullYear();
+      orderInfoMap[po.id] = { suppName: po.partner_id[1]||'', year: y };
+    }
+
+    // Now fetch the lines for those orders
+    const purchOrderIds = purchOrders.map(o=>o.id);
+    let purchLines = [];
+    if(purchOrderIds.length > 0){
+      try {
+        const plRes = await fetch(PROXY, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({action:'search_read', params:{
+            uid:UID, session:SESSION, model:'purchase.order.line',
+            domain:[['order_id','in', purchOrderIds.slice(0,2000)]],
+            fields:['order_id','product_id','price_subtotal','product_uom_qty'],
+            limit:10000
+          }})
+        });
+        const plData = await plRes.json();
+        purchLines = plData.result||[];
+      } catch(e){ console.warn('Purchase lines fetch failed:', e.message); }
+    }
+
+    syncProgress('Procesando '+purchLines.length+' líneas de compra...', 85);
+
+    // Build supplier purchase map: supplierName → { products: { pk: {name,years} } }
+    if(purchLines.length > 0){
+      const suppMap = {};
+      for(const l of purchLines){
+        const oInfo = l.order_id ? orderInfoMap[l.order_id[0]] : null;
+        if(!oInfo) continue;
+        const suppName = oInfo.suppName;
+        const y = oInfo.year;
+        const prodName = l.product_id ? l.product_id[1] : '(sin producto)';
+        const pk = l.product_id ? String(l.product_id[0]) : prodName;
+        const v = l.price_subtotal||0;
+        if(!suppMap[suppName]) suppMap[suppName] = {products:{}};
+        if(!suppMap[suppName].products[pk]) suppMap[suppName].products[pk] = {name:prodName, ref:'', cat:'', years:{}};
+        if(!suppMap[suppName].products[pk].years[y]) suppMap[suppName].products[pk].years[y] = 0;
+        suppMap[suppName].products[pk].years[y] += v;
+      }
+      // Match to SUPPLIER_DATA by normalized name and inject _purchaseProds
+      for(const s of SUPPLIER_DATA){
+        const sn = norm(s.p);
+        let match = suppMap[s.p];
+        if(!match){
+          for(const [k,v] of Object.entries(suppMap)){
+            if(norm(k).includes(sn) || sn.includes(norm(k))){ match = v; break; }
+          }
+        }
+        if(match){
+          s._purchaseProds = Object.values(match.products)
+            .filter(p=>(p.years[2024]||0)+(p.years[2025]||0)+(p.years[2026]||0)>0)
+            .sort((a,b)=>((b.years[2026]||0)+(b.years[2025]||0))-((a.years[2026]||0)+(a.years[2025]||0)));
+        }
+      }
+      SUPPLIER_PURCHASE_DATA = null;
+    }
+
+    syncProgress('Actualizando vistas...', 92);
     renderClientes();
+    renderProveedores();
     syncProgress('✅ Datos actualizados correctamente', 100);
     setTimeout(()=>{ overlay.style.display='none'; }, 1500);
 
