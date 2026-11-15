@@ -3438,7 +3438,7 @@ function saveClientNota(clientName){
 // PROVEEDORES TAB
 // ═══════════════════════════════════════════
 // Render sortable product table (used by both Clientes and Proveedores)
-function fmtQty(q){ if(!q||q===0) return ''; const r=Math.round(q*10)/10; return r===Math.round(r)?String(Math.round(r)):r.toFixed(1); }
+function fmtQty(q){ if(!q||q===0) return ''; const r=Math.round(q*10)/10; const s=r===Math.round(r)?String(Math.round(r)):r.toFixed(1); return s.replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
 function cellAmt(v, q){ if(v<=0) return '<span style="color:#ddd">—</span>'; const qs=q>0?'<span style="color:#888;font-size:0.78em"> · '+fmtQty(q)+' u</span>':''; return fmt(v)+qs; }
 function buildProdTableHTML(prods, tableId){
   if(!prods || prods.length===0) return '<div class="empty">Sin líneas de producto</div>';
