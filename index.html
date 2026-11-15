@@ -3280,6 +3280,12 @@ function jumpToClient(key, tab){
   document.querySelectorAll('.tab')[tabIndex].classList.add('active');
   document.getElementById(contentId).classList.add('active');
 
+  // For clientes: populate search box and render filtered list first
+  if(targetTab === 'clientes'){
+    const searchBox = document.getElementById('clienteSearch');
+    if(searchBox){ searchBox.value = key; filterClientes(); }
+  }
+
   // Fuzzy search
   const n = norm(key);
   const words = n.split(' ').filter(w=>w.length>3);
@@ -3303,7 +3309,9 @@ let CLIENT_DATA = [];
 function renderClientes(){
   CLIENT_DATA = buildClientData();
   renderClienteSummary();
-  renderClienteCards(CLIENT_DATA);
+  // Show empty state with hint — list loads on search or jump
+  const container = document.getElementById('clienteList');
+  container.innerHTML = '<div class="empty" style="color:#7a8aaa;font-size:13px;padding:28px 0">🔍 Escribe un nombre para buscar clientes</div>';
 }
 
 function renderClienteSummary(){
@@ -3323,7 +3331,11 @@ function renderClienteSummary(){
 
 function filterClientes(){
   const q = norm(document.getElementById('clienteSearch').value);
-  if(!q){ renderClienteCards(CLIENT_DATA); return; }
+  if(!q){
+    const container = document.getElementById('clienteList');
+    container.innerHTML = '<div class="empty" style="color:#7a8aaa;font-size:13px;padding:28px 0">🔍 Escribe un nombre para buscar clientes</div>';
+    return;
+  }
   const filtered = CLIENT_DATA.filter(c => norm(c.name).includes(q));
   renderClienteCards(filtered);
 }
