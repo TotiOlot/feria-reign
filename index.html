@@ -3322,8 +3322,6 @@ function renderClienteSummary(){
   const v25total = CLIENT_DATA.reduce((s,c)=>s+(c.years[2025]||0),0);
   bar.innerHTML = `
     <div class="sbar-item"><div class="sbar-val">${total}</div><div class="sbar-lbl">Total clientes</div></div>
-    <div class="sbar-item"><div class="sbar-val" style="color:#daaa00">${fmt(v26total)}</div><div class="sbar-lbl">Ventas 2026</div></div>
-    <div class="sbar-item"><div class="sbar-val" style="color:#2563eb">${fmt(v25total)}</div><div class="sbar-lbl">Ventas 2025</div></div>
     <div class="sbar-item"><div class="sbar-val" style="color:#16a34a">${withNotes}</div><div class="sbar-lbl">Con notas</div></div>
     <div class="sbar-item"><div class="sbar-val">${new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'short'})}</div><div class="sbar-lbl">Hoy</div></div>
   `;
