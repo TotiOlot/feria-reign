@@ -3373,48 +3373,100 @@ function toggleClient(card){
   if(!wasOpen) card.classList.add('open');
 }
 
+function miniBarChart(v24, v25, v26){
+  const mx = Math.max(v24,v25,v26,1);
+  const h = 56, w = 180, bw = 44, gap = 6, base = 60;
+  const bar = (v,x,cls,lbl) => {
+    const bh = Math.max(Math.round(v/mx*(h-4)),v>0?3:0);
+    const y = base - bh;
+    const pct = v25>0&&v>0 ? Math.round((v-v25)/v25*100) : null;
+    const pctTxt = lbl==='2026'&&pct!==null ? `<text x="${x+bw/2}" y="${base+22}" text-anchor="middle" font-size="9" fill="${pct>=0?'#16a34a':'#dc2626'}">${pct>=0?'+':''}${pct}%</text>` : '';
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="4" class="${cls}"/>
+      <text x="${x+bw/2}" y="${y-3}" text-anchor="middle" font-size="9" fill="#6b7280">${v>0?fmtK(v):''}</text>
+      <text x="${x+bw/2}" y="${base+12}" text-anchor="middle" font-size="9" fill="#9ca3af">${lbl}</text>${pctTxt}`;
+  };
+  return `<svg width="${w}" height="${base+30}" style="display:block;margin:0 auto 4px">
+    <style>.bc24{fill:#e2e8f0}.bc25{fill:#93c5fd}.bc26{fill:#daaa00}</style>
+    ${bar(v24,4,   'bc24','2024')}
+    ${bar(v25,4+bw+gap,'bc25','2025')}
+    ${bar(v26,4+2*(bw+gap),'bc26','2026')}
+  </svg>`;
+}
+function fmtK(v){ if(v>=1000000) return (v/1000000).toFixed(1)+'M'; if(v>=1000) return Math.round(v/1000)+'k'; return String(Math.round(v)); }
+
 function renderClientDetail(c){
   const v24=c.years[2024]||0, v25=c.years[2025]||0, v26=c.years[2026]||0;
   const savedNotes = lsGet('client_notas_'+c.name);
   const notesText = savedNotes ? (savedNotes.text||'') : '';
   const notesTs = lsGet('client_notas_ts_'+c.name);
+  const safeId = c.name.replace(/[^a-z0-9]/gi,'_');
+  const safeKey = c.name.replace(/'/g,"\\'");
 
   // Build product rows sorted by 2026 desc then 2025
   const prods = Object.values(c.products).sort((a,b)=>((b.years[2026]||0)+(b.years[2025]||0))-((a.years[2026]||0)+(a.years[2025]||0)));
-  const clientTableId = 'pt-cli-'+c.name.replace(/[^a-z0-9]/gi,'_');
+  const clientTableId = 'pt-cli-'+safeId;
 
-  const safeKey = c.name.replace(/'/g,"\\'");
+  // Top 3 products for resumen
+  const top3 = prods.slice(0,3);
+  const top3html = top3.length ? `
+    <div style="margin-top:12px">
+      <div style="font-size:11px;font-weight:600;color:#7a8aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Top productos</div>
+      ${top3.map((p,i)=>{
+        const pv=p.years[2026]||p.years[2025]||0;
+        const pq=(p.qty_years&&(p.qty_years[2026]||p.qty_years[2025]))||0;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f0f2f8">
+          <span style="font-size:11px;font-weight:700;color:#daaa00;min-width:16px">${i+1}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;color:#1a2236;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name||p.ref}</div>
+            ${p.ref?`<div style="font-size:10px;color:#aab2c8">${p.ref}${p.cat?' · '+p.cat:''}</div>`:''}
+          </div>
+          <div style="text-align:right;font-size:11px;color:#374151">${pv>0?fmt(pv):'—'}${pq>0?'<br><span style="color:#9ca3af;font-size:10px">'+fmtQty(pq)+' u</span>':''}</div>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  // Variación %
+  const varPct = v25>0 ? Math.round((v26-v25)/v25*100) : null;
+  const varHtml = varPct!==null ? `<span style="font-size:12px;font-weight:600;color:${varPct>=0?'#16a34a':'#dc2626'};background:${varPct>=0?'#dcfce7':'#fee2e2'};border-radius:6px;padding:2px 7px">${varPct>=0?'↑':'↓'} ${Math.abs(varPct)}% vs 2025</span>` : '';
 
   return `
     <div class="detail-tabs">
       <div class="dtab active" onclick="switchDtab(this,'resumen-${safeKey}')">📊 Resumen</div>
-      <div class="dtab" onclick="switchDtab(this,'productos-${safeKey}')">🧪 Productos</div>
+      <div class="dtab" onclick="switchDtab(this,'productos-${safeKey}')">🧪 Productos (${prods.length})</div>
       <div class="dtab" onclick="switchDtab(this,'notas-${safeKey}')">📋 Notas</div>
     </div>
 
-    <div class="dtab-content active" id="resumen-${c.name.replace(/[^a-z0-9]/gi,'_')}">
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
-        <div class="sbar-item"><div class="sbar-val" style="font-size:16px">${fmt(v24)}</div><div class="sbar-lbl">2024</div></div>
-        <div class="sbar-item"><div class="sbar-val" style="font-size:16px;color:#2563eb">${fmt(v25)}</div><div class="sbar-lbl">2025</div></div>
-        <div class="sbar-item" style="border-color:#daaa00"><div class="sbar-val" style="font-size:16px;color:#92650a">${fmt(v26)}</div><div class="sbar-lbl">2026 YTD</div></div>
+    <div class="dtab-content active" id="resumen-${safeId}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div style="font-size:22px;font-weight:700;color:#daaa00">${fmt(v26)}</div>
+          <div style="font-size:11px;color:#7a8aaa">2026 YTD</div>
+        </div>
+        <div style="text-align:right">
+          ${varHtml}
+          <div style="font-size:11px;color:#7a8aaa;margin-top:4px">${prods.length} refs · ${trendIcon(v25,v26)}</div>
+        </div>
       </div>
-      <div style="font-size:12px;color:#7a8aaa;text-align:center;padding:4px 0">
-        Tendencia 25→26: ${trendIcon(v25,v26)} · ${Object.keys(c.products).length} productos/refs distintos
+      ${miniBarChart(v24,v25,v26)}
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px">
+        <div class="sbar-item"><div class="sbar-val" style="font-size:14px;color:#2563eb">${fmt(v25)}</div><div class="sbar-lbl">2025</div></div>
+        <div class="sbar-item"><div class="sbar-val" style="font-size:14px">${fmt(v24)}</div><div class="sbar-lbl">2024</div></div>
       </div>
+      ${top3html}
     </div>
 
-    <div class="dtab-content" id="productos-${c.name.replace(/[^a-z0-9]/gi,'_')}">
+    <div class="dtab-content" id="productos-${safeId}">
       ${buildProdTableHTML(prods, clientTableId)}
     </div>
 
-    <div class="dtab-content" id="notas-${c.name.replace(/[^a-z0-9]/gi,'_')}">
+    <div class="dtab-content" id="notas-${safeId}">
       <div class="notes-area">
         <div class="notes-label">Notas de la reunión — ${c.name}</div>
-        <textarea class="notes-textarea" id="nota-${c.name.replace(/[^a-z0-9]/gi,'_')}" 
+        <textarea class="notes-textarea" id="nota-${safeId}"
           placeholder="Acuerdos, próximos pasos, precios acordados, productos de interés...">${notesText}</textarea>
         <div class="notes-save">
           <button class="btn btn-gold" onclick="saveClientNota('${safeKey}')">💾 Guardar</button>
-          <span class="saved-ts" id="nota-ts-${c.name.replace(/[^a-z0-9]/gi,'_')}">${notesTs?'Guardado: '+fmtTs(notesTs):''}</span>
+          <span class="saved-ts" id="nota-ts-${safeId}">${notesTs?'Guardado: '+fmtTs(notesTs):''}</span>
         </div>
       </div>
     </div>
@@ -3555,27 +3607,41 @@ function renderProveedorCards(list){
         <div class="client-arrow">▶</div>
       </div>
       <div class="supplier-detail">
-        <div style="margin-bottom:14px">
-          <div class="year-row">
-            <span class="year-label">2026</span>
-            <div class="bar-wrap"><div class="bar-fill bar-26" style="width:${pct26}%">${r26>0?fmt(r26):''}</div></div>
+        ${(()=>{
+          const varPct = r25>0 ? Math.round((r26-r25)/r25*100) : null;
+          const varHtml = varPct!==null ? `<span style="font-size:12px;font-weight:600;color:${varPct>=0?'#16a34a':'#dc2626'};background:${varPct>=0?'#dcfce7':'#fee2e2'};border-radius:6px;padding:2px 7px">${varPct>=0?'↑':'↓'} ${Math.abs(varPct)}% vs 2025</span>` : '';
+          const top3 = (s._purchaseProds||[]).slice(0,3);
+          const top3html = top3.length ? `
+            <div style="margin:10px 0 4px">
+              <div style="font-size:11px;font-weight:600;color:#7a8aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Top productos comprados</div>
+              ${top3.map((p,i)=>{
+                const pv=p.years[2026]||p.years[2025]||0;
+                const pq=(p.qty_years&&(p.qty_years[2026]||p.qty_years[2025]))||0;
+                return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f0f2f8">
+                  <span style="font-size:11px;font-weight:700;color:#daaa00;min-width:16px">${i+1}</span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;font-weight:600;color:#1a2236;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name||p.ref}</div>
+                  </div>
+                  <div style="text-align:right;font-size:11px;color:#374151">${pv>0?fmt(pv):'—'}${pq>0?'<br><span style="color:#9ca3af;font-size:10px">'+fmtQty(pq)+' u</span>':''}</div>
+                </div>`;
+              }).join('')}
+            </div>` : '';
+          return `
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div><div style="font-size:20px;font-weight:700;color:#daaa00">${fmt(r26)}</div><div style="font-size:11px;color:#7a8aaa">2026 compras</div></div>
+            <div style="text-align:right">${varHtml}<div style="font-size:11px;color:#7a8aaa;margin-top:4px">${trendIcon(r25,r26)} ${hasRealData?'<span style="color:#22c55e">● Odoo</span>':'<span style="color:#f59e0b">○ est.</span>'}</div></div>
           </div>
-          <div class="year-row">
-            <span class="year-label">2025</span>
-            <div class="bar-wrap"><div class="bar-fill bar-25" style="width:${pct25}%">${r25>0?fmt(r25):''}</div></div>
+          ${miniBarChart(r24,r25,r26)}
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0 4px">
+            <div class="sbar-item"><div class="sbar-val" style="font-size:13px;color:#2563eb">${fmt(r25)}</div><div class="sbar-lbl">2025</div></div>
+            <div class="sbar-item"><div class="sbar-val" style="font-size:13px">${fmt(r24)}</div><div class="sbar-lbl">2024</div></div>
           </div>
-          <div class="year-row">
-            <span class="year-label">2024</span>
-            <div class="bar-wrap"><div class="bar-fill bar-24" style="width:${pct24}%">${r24>0?fmt(r24):''}</div></div>
-          </div>
-          <div style="font-size:11px;color:#aab2c8;margin-top:8px">
-            Tendencia 25→26: ${trendIcon(r25, r26)}
-          </div>
-        </div>
-        ${s.meetingAt ? `<div style="margin-bottom:12px;padding:6px 10px;background:#f0f8ff;border-radius:8px;font-size:12px;color:#2563eb;border-left:3px solid #2563eb">📍 Reunión MEDICA: ${s.meetingAt}</div>` : ''}
+          ${top3html}`;
+        })()}
+        ${s.meetingAt ? `<div style="margin:10px 0 4px;padding:6px 10px;background:#f0f8ff;border-radius:8px;font-size:12px;color:#2563eb;border-left:3px solid #2563eb">📍 Reunión MEDICA: ${s.meetingAt}</div>` : ''}
         ${s._purchaseProds && s._purchaseProds.length ? `
-        <div class="detail-tabs">
-          <div class="dtab active" onclick="switchDtab(this,'prov-compras-${safeId}')">🛒 Compras</div>
+        <div class="detail-tabs" style="margin-top:12px">
+          <div class="dtab active" onclick="switchDtab(this,'prov-compras-${safeId}')">🛒 Compras (${s._purchaseProds.length})</div>
           <div class="dtab" onclick="switchDtab(this,'prov-notas-${safeId}')">📋 Notas</div>
         </div>
         <div class="dtab-content active" id="prov-compras-${safeId}">
