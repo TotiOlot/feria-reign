@@ -3280,10 +3280,13 @@ function jumpToClient(key, tab){
   document.querySelectorAll('.tab')[tabIndex].classList.add('active');
   document.getElementById(contentId).classList.add('active');
 
-  // For clientes: populate search box and render filtered list first
+  // Populate search box and render filtered list first
   if(targetTab === 'clientes'){
     const searchBox = document.getElementById('clienteSearch');
     if(searchBox){ searchBox.value = key; filterClientes(); }
+  } else if(targetTab === 'proveedores'){
+    const searchBox = document.getElementById('provSearch');
+    if(searchBox){ searchBox.value = key; filterProveedores(); }
   }
 
   // Fuzzy search
@@ -3504,12 +3507,17 @@ function sortProdTable(tableId, year){
 }
 
 function renderProveedores(){
-  renderProveedorCards(SUPPLIER_DATA);
+  const container = document.getElementById('proveedorList');
+  container.innerHTML = '<div class="empty" style="color:#7a8aaa;font-size:13px;padding:28px 0">🔍 Escribe un nombre para buscar proveedores</div>';
 }
 
 function filterProveedores(){
   const q = norm(document.getElementById('provSearch').value);
-  if(!q){ renderProveedorCards(SUPPLIER_DATA); return; }
+  if(!q){
+    const container = document.getElementById('proveedorList');
+    container.innerHTML = '<div class="empty" style="color:#7a8aaa;font-size:13px;padding:28px 0">🔍 Escribe un nombre para buscar proveedores</div>';
+    return;
+  }
   const filtered = SUPPLIER_DATA.filter(s => norm(s.p).includes(q));
   renderProveedorCards(filtered);
 }
