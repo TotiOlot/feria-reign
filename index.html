@@ -3518,20 +3518,71 @@ function saveClientNota(clientName){
 // Render sortable product table (used by both Clientes and Proveedores)
 function fmtQty(q){ if(!q||q===0) return ''; const r=Math.round(q*10)/10; const s=r===Math.round(r)?String(Math.round(r)):r.toFixed(1); return s.replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
 function cellAmt(v, q){ if(v<=0) return '<span style="color:#ddd">—</span>'; const qs=q>0?'<span style="color:#888;font-size:0.78em"> · '+fmtQty(q)+' u</span>':''; return fmt(v)+qs; }
+function inferCat(p){
+  // Use explicit cat if set and informative (not generic 'Otros')
+  if(p.cat && p.cat.trim() && p.cat.trim() !== 'Otros') return p.cat.trim();
+  const n = (p.name||p.ref||'').toUpperCase();
+  if(/PCR|QPCR|RT-PCR/.test(n)){
+    if(/5\s*L|5000\s*ML|5\s*LITR/.test(n)) return 'PCR · 5 L';
+    if(/1\s*L|1000\s*ML|1\s*LITR/.test(n)) return 'PCR · 1 L';
+    if(/500\s*ML/.test(n)) return 'PCR · 500 mL';
+    return 'PCR';
+  }
+  if(/GLUCOSE|GLUCOS|CHOLESTEROL|COLEST|TRIGLYC|TRIGLI|CREATININ|UREA|ALBUMIN|BILIRRUB|ALT\b|GPT|AST\b|GOT|GGT|LDH|CK\b|CREATINE\sKINASE|ALP\b|IRON\b|CALCIUM|MAGNESIUM|PHOSPHOR|AMYLASE|AMILAS|LIPASE|LIPAS|PROTEIN|PROTEINA|URIC/.test(n)){
+    if(/5\s*L|5000\s*ML|5\s*LITR/.test(n)) return 'Bioquímica · 5 L';
+    if(/1\s*L(?!C)|1000\s*ML|1\s*LITR/.test(n)) return 'Bioquímica · 1 L';
+    return 'Bioquímica';
+  }
+  if(/LATEX|AGLUT|AGGLUT|SEROL/.test(n)) return 'Serología / Látex';
+  if(/DOA|DRUG|DROGA|URINA|ORINA/.test(n)) return 'Drug of Abuse';
+  if(/BUFFER|TAMPON|WASH|LAVADO|PBS|TRIS/.test(n)) return 'Tampones / Buffers';
+  if(/CONTROL|CALIBR|CAL-|CTRL/.test(n)) return 'Controles / Calibradores';
+  return 'Otros';
+}
+
 function buildProdTableHTML(prods, tableId){
   if(!prods || prods.length===0) return '<div class="empty">Sin líneas de producto</div>';
-  const rows = prods.map(p => {
+  // Filter out zero-value products and assign category
+  const valid = prods.filter(p => (p.years[2024]||0)+(p.years[2025]||0)+(p.years[2026]||0) > 0)
+    .map(p => ({...p, _cat: inferCat(p)}));
+  if(valid.length === 0) return '<div class="empty">Sin líneas de producto</div>';
+
+  // Group by category, sort categories by total 2026 desc
+  const groups = {};
+  valid.forEach(p => {
+    if(!groups[p._cat]) groups[p._cat] = [];
+    groups[p._cat].push(p);
+  });
+  const sortedCats = Object.keys(groups).sort((a,b) => {
+    const sa = groups[a].reduce((s,p)=>s+(p.years[2026]||0),0);
+    const sb = groups[b].reduce((s,p)=>s+(p.years[2026]||0),0);
+    return sb-sa;
+  });
+
+  const makeRow = (p, idx) => {
     const p24=p.years[2024]||0, p25=p.years[2025]||0, p26=p.years[2026]||0;
-    if(p24+p25+p26===0) return '';
     const q24=(p.qty_years&&p.qty_years[2024])||0, q25=(p.qty_years&&p.qty_years[2025])||0, q26=(p.qty_years&&p.qty_years[2026])||0;
     return `<tr>
-      <td><div class="prod-name">${p.name||p.ref}</div><div class="prod-ref">${p.ref} ${p.cat?'· '+p.cat:''}</div></td>
+      <td><div class="prod-name">${p.name||p.ref}</div>${p.ref?`<div class="prod-ref">${p.ref}</div>`:''}</td>
       <td class="r" data-value="${p24}">${cellAmt(p24,q24)}</td>
       <td class="r" data-value="${p25}">${cellAmt(p25,q25)}</td>
       <td class="r" data-value="${p26}">${cellAmt(p26,q26)}</td>
       <td class="r">${trendIcon(p25,p26)}</td>
     </tr>`;
+  };
+
+  const bodyRows = sortedCats.map(cat => {
+    const catProds = groups[cat].sort((a,b)=>(b.years[2026]||0)-(a.years[2026]||0));
+    const catTotal26 = catProds.reduce((s,p)=>s+(p.years[2026]||0),0);
+    const catTotal25 = catProds.reduce((s,p)=>s+(p.years[2025]||0),0);
+    const catHeader = `<tr style="background:#f4f6fb">
+      <td colspan="5" style="padding:5px 10px;font-size:11px;font-weight:700;color:#5a6a8a;letter-spacing:0.04em;text-transform:uppercase;border-top:2px solid #e0e6f0">
+        ${cat} <span style="font-weight:400;color:#9aa3b8;font-size:10px;margin-left:6px">${catProds.length} ref · ${fmt(catTotal26)}</span>
+      </td>
+    </tr>`;
+    return catHeader + catProds.map(makeRow).join('');
   }).join('');
+
   return `<div style="overflow-x:auto">
     <table class="prod-table" id="${tableId}">
       <thead><tr>
@@ -3541,7 +3592,7 @@ function buildProdTableHTML(prods, tableId){
         <th class="r sort-th" onclick="sortProdTable('${tableId}',2026)" data-sort-col="" title="Ordenar por 2026">2026 <span class="sort-icon"></span></th>
         <th class="r">Tendencia</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${bodyRows}</tbody>
     </table>
   </div>`;
 }
