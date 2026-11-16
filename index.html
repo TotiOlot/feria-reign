@@ -3192,7 +3192,7 @@ function buildSupplierPurchaseData(){
     const cl = l.cl.trim();
     if(!map[cl]) map[cl] = { products:{} };
     const pk = (l.ref||l.p||'').trim() || l.p;
-    if(!map[cl].products[pk]) map[cl].products[pk] = { name:l.p, ref:l.ref||'', cat:l.c||'', years:{}, qty_years:{} };
+    if(!map[cl].products[pk]) map[cl].products[pk] = { name:l.p, ref:l.ref||'', cat:l.c||'', par:l.r||'', years:{}, qty_years:{} };
     if(!map[cl].products[pk].years[l.y]) map[cl].products[pk].years[l.y] = 0;
     map[cl].products[pk].years[l.y] += l.v;
     if(!map[cl].products[pk].qty_years[l.y]) map[cl].products[pk].qty_years[l.y] = 0;
@@ -3219,7 +3219,7 @@ function buildClientData(){
     map[cl].years[l.y] += l.v;
     // products by name+ref
     const pk = (l.ref||l.p||'').trim() || l.p;
-    if(!map[cl].products[pk]) map[cl].products[pk] = { name:l.p, ref:l.ref||'', cat:l.c||'', years:{}, qty_years:{} };
+    if(!map[cl].products[pk]) map[cl].products[pk] = { name:l.p, ref:l.ref||'', cat:l.c||'', par:l.r||'', years:{}, qty_years:{} };
     if(!map[cl].products[pk].years[l.y]) map[cl].products[pk].years[l.y] = 0;
     map[cl].products[pk].years[l.y] += l.v;
     if(!map[cl].products[pk].qty_years[l.y]) map[cl].products[pk].qty_years[l.y] = 0;
@@ -3518,81 +3518,88 @@ function saveClientNota(clientName){
 // Render sortable product table (used by both Clientes and Proveedores)
 function fmtQty(q){ if(!q||q===0) return ''; const r=Math.round(q*10)/10; const s=r===Math.round(r)?String(Math.round(r)):r.toFixed(1); return s.replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
 function cellAmt(v, q){ if(v<=0) return '<span style="color:#ddd">—</span>'; const qs=q>0?'<span style="color:#888;font-size:0.78em"> · '+fmtQty(q)+' u</span>':''; return fmt(v)+qs; }
-function inferCat(p){
-  // Use explicit cat if set and informative (not generic 'Otros')
-  if(p.cat && p.cat.trim() && p.cat.trim() !== 'Otros') return p.cat.trim();
-  const n = (p.name||p.ref||'').toUpperCase();
-  if(/PCR|QPCR|RT-PCR/.test(n)){
-    if(/5\s*L|5000\s*ML|5\s*LITR/.test(n)) return 'PCR · 5 L';
-    if(/1\s*L|1000\s*ML|1\s*LITR/.test(n)) return 'PCR · 1 L';
-    if(/500\s*ML/.test(n)) return 'PCR · 500 mL';
-    return 'PCR';
+
+// ── Agrupación por parámetro + formato ──
+function prodParam(p){
+  const n=(p.name||'').toUpperCase();
+  if(/\bPCR\b/.test(n)){
+    if(/QUANT|TURBI/.test(n)) return 'PCR turbidimetría';
+    return 'PCR látex';
   }
-  if(/GLUCOSE|GLUCOS|CHOLESTEROL|COLEST|TRIGLYC|TRIGLI|CREATININ|UREA|ALBUMIN|BILIRRUB|ALT\b|GPT|AST\b|GOT|GGT|LDH|CK\b|CREATINE\sKINASE|ALP\b|IRON\b|CALCIUM|MAGNESIUM|PHOSPHOR|AMYLASE|AMILAS|LIPASE|LIPAS|PROTEIN|PROTEINA|URIC/.test(n)){
-    if(/5\s*L|5000\s*ML|5\s*LITR/.test(n)) return 'Bioquímica · 5 L';
-    if(/1\s*L(?!C)|1000\s*ML|1\s*LITR/.test(n)) return 'Bioquímica · 1 L';
-    return 'Bioquímica';
+  const r=(p.par||'').trim();
+  if(r) return r;
+  // sin código: primera parte del nombre antes del primer punto o guion
+  return (p.name||p.ref||'Otros').split(/[.\-–(]/)[0].trim().toUpperCase().slice(0,32)||'Otros';
+}
+function prodFormat(p){
+  // devuelve {label, litros por unidad (0 si no es volumen en L)}
+  const n=(p.name||'');
+  let m;
+  if((m=n.match(/(\d+(?:[.,]\d+)?)\s*(?:L\b|Lit(?:er|re)s?\b|Litros?\b)(?!\w)/i)) && !/\d\s*x\s*\d+\s*m?L/i.test(n)){
+    const L=parseFloat(m[1].replace(',','.'));
+    return {label:L+' L', lit:L};
   }
-  if(/LATEX|AGLUT|AGGLUT|SEROL/.test(n)) return 'Serología / Látex';
-  if(/DOA|DRUG|DROGA|URINA|ORINA/.test(n)) return 'Drug of Abuse';
-  if(/BUFFER|TAMPON|WASH|LAVADO|PBS|TRIS/.test(n)) return 'Tampones / Buffers';
-  if(/CONTROL|CALIBR|CAL-|CTRL/.test(n)) return 'Controles / Calibradores';
-  return 'Otros';
+  if(/Litro\s*\(\s*\d+\s*x/i.test(n)||/Liter\s*\(\s*\d+\s*x/i.test(n)){
+    m=n.match(/(\d+(?:[.,]\d+)?)\s*(?:Lit)/i); const L=m?parseFloat(m[1]):1; return {label:L+' L', lit:L};
+  }
+  if(/BULK/i.test(n)) return {label:'Bulk', lit:0};
+  
+  return {label:'kits', lit:0, kit:true};
+}
+function fmtLit(l){ const r=Math.round(l*10)/10; return (r===Math.round(r)?String(Math.round(r)):r.toFixed(1)).replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+
+function cellAmtG(v,q,lit,kit){
+  if(v<=0 && q<=0) return '<span style="color:#ddd">—</span>';
+  let s = v>0 ? fmt(v) : '';
+  if(q>0){
+    const t = lit>0 ? fmtLit(q*lit)+' L' : fmtQty(q)+(kit?' kits':' u');
+    s += '<span style="color:#888;font-size:0.78em">'+(v>0?' · ':'')+t+'</span>';
+  }
+  return s;
 }
 
 function buildProdTableHTML(prods, tableId){
   if(!prods || prods.length===0) return '<div class="empty">Sin líneas de producto</div>';
-  // Filter out zero-value products and assign category
-  const valid = prods.filter(p => (p.years[2024]||0)+(p.years[2025]||0)+(p.years[2026]||0) > 0)
-    .map(p => ({...p, _cat: inferCat(p)}));
-  if(valid.length === 0) return '<div class="empty">Sin líneas de producto</div>';
-
-  // Group by category, sort categories by total 2026 desc
-  const groups = {};
-  valid.forEach(p => {
-    if(!groups[p._cat]) groups[p._cat] = [];
-    groups[p._cat].push(p);
+  const groups={};
+  prods.forEach(p=>{
+    const tot=(p.years[2024]||0)+(p.years[2025]||0)+(p.years[2026]||0);
+    const qtot=p.qty_years?((p.qty_years[2024]||0)+(p.qty_years[2025]||0)+(p.qty_years[2026]||0)):0;
+    if(tot<=0 && qtot<=0) return;
+    const par=prodParam(p), f=prodFormat(p);
+    const key=par+'||'+f.label;
+    if(!groups[key]) groups[key]={par, fmt:f, years:{}, q:{}, refs:[]};
+    const g=groups[key];
+    [2024,2025,2026].forEach(y=>{
+      g.years[y]=(g.years[y]||0)+(p.years[y]||0);
+      g.q[y]=(g.q[y]||0)+((p.qty_years&&p.qty_years[y])||0);
+    });
+    g.refs.push(p.ref||p.name);
   });
-  const sortedCats = Object.keys(groups).sort((a,b) => {
-    const sa = groups[a].reduce((s,p)=>s+(p.years[2026]||0),0);
-    const sb = groups[b].reduce((s,p)=>s+(p.years[2026]||0),0);
-    return sb-sa;
-  });
-
-  const makeRow = (p, idx) => {
-    const p24=p.years[2024]||0, p25=p.years[2025]||0, p26=p.years[2026]||0;
-    const q24=(p.qty_years&&p.qty_years[2024])||0, q25=(p.qty_years&&p.qty_years[2025])||0, q26=(p.qty_years&&p.qty_years[2026])||0;
+  const list=Object.values(groups);
+  if(!list.length) return '<div class="empty">Sin líneas de producto</div>';
+  list.sort((a,b)=>((b.years[2026]||0)+(b.years[2025]||0))-((a.years[2026]||0)+(a.years[2025]||0)));
+  const rows=list.map(g=>{
+    const p24=g.years[2024]||0,p25=g.years[2025]||0,p26=g.years[2026]||0;
+    const L=g.fmt.lit, K=!!g.fmt.kit;
+    const title = g.par+' · '+g.fmt.label;
     return `<tr>
-      <td><div class="prod-name">${p.name||p.ref}</div>${p.ref?`<div class="prod-ref">${p.ref}</div>`:''}</td>
-      <td class="r" data-value="${p24}">${cellAmt(p24,q24)}</td>
-      <td class="r" data-value="${p25}">${cellAmt(p25,q25)}</td>
-      <td class="r" data-value="${p26}">${cellAmt(p26,q26)}</td>
+      <td><div class="prod-name">${title}</div><div class="prod-ref">${g.refs.length} ref${g.refs.length>1?'s':''}</div></td>
+      <td class="r" data-value="${p24}">${cellAmtG(p24,g.q[2024]||0,L,K)}</td>
+      <td class="r" data-value="${p25}">${cellAmtG(p25,g.q[2025]||0,L,K)}</td>
+      <td class="r" data-value="${p26}">${cellAmtG(p26,g.q[2026]||0,L,K)}</td>
       <td class="r">${trendIcon(p25,p26)}</td>
     </tr>`;
-  };
-
-  const bodyRows = sortedCats.map(cat => {
-    const catProds = groups[cat].sort((a,b)=>(b.years[2026]||0)-(a.years[2026]||0));
-    const catTotal26 = catProds.reduce((s,p)=>s+(p.years[2026]||0),0);
-    const catTotal25 = catProds.reduce((s,p)=>s+(p.years[2025]||0),0);
-    const catHeader = `<tr style="background:#f4f6fb">
-      <td colspan="5" style="padding:5px 10px;font-size:11px;font-weight:700;color:#5a6a8a;letter-spacing:0.04em;text-transform:uppercase;border-top:2px solid #e0e6f0">
-        ${cat} <span style="font-weight:400;color:#9aa3b8;font-size:10px;margin-left:6px">${catProds.length} ref · ${fmt(catTotal26)}</span>
-      </td>
-    </tr>`;
-    return catHeader + catProds.map(makeRow).join('');
   }).join('');
-
   return `<div style="overflow-x:auto">
     <table class="prod-table" id="${tableId}">
       <thead><tr>
-        <th>Producto / Referencia</th>
+        <th>Parámetro · formato</th>
         <th class="r sort-th" onclick="sortProdTable('${tableId}',2024)" data-sort-col="" title="Ordenar por 2024">2024 <span class="sort-icon"></span></th>
         <th class="r sort-th" onclick="sortProdTable('${tableId}',2025)" data-sort-col="" title="Ordenar por 2025">2025 <span class="sort-icon"></span></th>
         <th class="r sort-th" onclick="sortProdTable('${tableId}',2026)" data-sort-col="" title="Ordenar por 2026">2026 <span class="sort-icon"></span></th>
         <th class="r">Tendencia</th>
       </tr></thead>
-      <tbody>${bodyRows}</tbody>
+      <tbody>${rows}</tbody>
     </table>
   </div>`;
 }
