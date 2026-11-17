@@ -1,11 +1,34 @@
 {
   "version": 2,
   "builds": [
-    { "src": "index.html", "use": "@vercel/static" },
-    { "src": "api/odoo.js", "use": "@vercel/node" }
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "agenda.json",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "api/odoo.js",
+      "use": "@vercel/node"
+    }
   ],
   "routes": [
-    { "src": "/api/odoo", "dest": "/api/odoo.js" },
-    { "src": "/(.*)", "dest": "/$1" }
+    {
+      "src": "/api/odoo",
+      "dest": "/api/odoo.js"
+    },
+    {
+      "src": "/agenda.json",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0"
+      },
+      "continue": true
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
   ]
 }

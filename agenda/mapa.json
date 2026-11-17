@@ -1,0 +1,118 @@
+{
+ "_ayuda": "Reglas para enlazar cada reunión de Outlook con su ficha. 'buscar' se compara (sin mayúsculas ni acentos) con asunto + organizador. 'titulo' sustituye el asunto si se indica.",
+ "reglas": [
+  {
+   "buscar": [
+    "advy"
+   ],
+   "titulo": "ADVY / Sorachim",
+   "clientKey": "SORACHIM",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "yashraj",
+    "ybl"
+   ],
+   "titulo": "YBL / Yashraj",
+   "clientKey": "Yashraj",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "reuven faber"
+   ],
+   "titulo": "Reuven Faber",
+   "clientKey": null
+  },
+  {
+   "buscar": [
+    "dialab"
+   ],
+   "clientKey": "Dialab",
+   "tab": "clientes"
+  },
+  {
+   "buscar": [
+    "gesan"
+   ],
+   "clientKey": "GESAN",
+   "tab": "clientes"
+  },
+  {
+   "buscar": [
+    "monlab"
+   ],
+   "clientKey": "MONLAB",
+   "tab": "clientes"
+  },
+  {
+   "buscar": [
+    "jtc"
+   ],
+   "titulo": "JTC Diagnostics",
+   "clientKey": "JTC Diagnostics",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "bio-techne",
+    "biotechne"
+   ],
+   "clientKey": "Bio-Techne",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "fapon"
+   ],
+   "titulo": "Fapon Biotech",
+   "clientKey": "Fapon",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "sdix"
+   ],
+   "clientKey": "SDIX",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "sorachim",
+    "advy"
+   ],
+   "clientKey": "SORACHIM",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "diazyme"
+   ],
+   "clientKey": "Diazyme",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "anteotech"
+   ],
+   "titulo": "Evento AnteoTech",
+   "clientKey": "ANTEOTECH",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "sekisui"
+   ],
+   "clientKey": "Sekisui",
+   "tab": "proveedores"
+  },
+  {
+   "buscar": [
+    "merck"
+   ],
+   "clientKey": "Merck / Sigma-Aldrich",
+   "tab": "proveedores"
+  }
+ ]
+}
