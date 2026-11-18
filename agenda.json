@@ -169,7 +169,7 @@
     {
      "time": "10:25",
      "subj": "Sekisui",
-     "sub": "Stand H1/C38 · Provisional",
+     "sub": "Stand H1/C38",
      "clickable": true,
      "clientKey": "Sekisui",
      "tab": "proveedores"
@@ -189,5 +189,5 @@
    ]
   }
  ],
- "updated": "2026-11-18T07:05+01:00"
+ "updated": "2026-11-18T11:06+01:00"
 }
