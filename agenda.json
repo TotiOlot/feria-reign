@@ -167,9 +167,9 @@
    "color": "gold",
    "items": [
     {
-     "time": "10:15",
+     "time": "10:25",
      "subj": "Sekisui",
-     "sub": "Stand H1/C38",
+     "sub": "Stand H1/C38 · Provisional",
      "clickable": true,
      "clientKey": "Sekisui",
      "tab": "proveedores"
@@ -189,5 +189,5 @@
    ]
   }
  ],
- "updated": "2026-11-17T07:43+01:00"
+ "updated": "2026-11-18T07:05+01:00"
 }
